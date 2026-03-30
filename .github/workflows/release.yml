@@ -169,8 +169,3 @@ jobs:
           delete_tags: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # ---------------- Optional notifications ----------------
-      - name: Notify Slack (placeholder)
-        if: failure()
-        run: echo "Notify team: build/release failed!" 
