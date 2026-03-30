@@ -31,7 +31,7 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
-      # ---------------- Cache Maven (optional) ----------------
+      # ---------------- Cache Maven ----------------
       - name: Cache Maven
         uses: actions/cache@v3
         with:
@@ -40,48 +40,42 @@ jobs:
           restore-keys: maven-${{ runner.os }}-
 
       # ---------------- Paper builds (Java 17) ----------------
-      - name: Setup Java 17 for Paper
+      - name: Setup Java 17 for Paper/Spigot
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
       - name: Build Paper 1.20.1
-        run: ./gradlew build -Pplatform=paper -PmcVersion=1.20.1
+        run: ./gradlew :paper:build -PmcVersion=1.20.1 --configure-on-demand
       - name: Build Paper 1.20.4
-        run: ./gradlew build -Pplatform=paper -PmcVersion=1.20.4
+        run: ./gradlew :paper:build -PmcVersion=1.20.4 --configure-on-demand
       - name: Build Paper 1.20.5
-        run: ./gradlew build -Pplatform=paper -PmcVersion=1.20.5
+        run: ./gradlew :paper:build -PmcVersion=1.20.5 --configure-on-demand
       - name: Build Paper 1.20.6
-        run: ./gradlew build -Pplatform=paper -PmcVersion=1.20.6
+        run: ./gradlew :paper:build -PmcVersion=1.20.6 --configure-on-demand
       - name: Build Paper 1.21
-        run: ./gradlew build -Pplatform=paper -PmcVersion=1.21
+        run: ./gradlew :paper:build -PmcVersion=1.21 --configure-on-demand
       - name: Build Paper 1.21.1
-        run: ./gradlew build -Pplatform=paper -PmcVersion=1.21.1
+        run: ./gradlew :paper:build -PmcVersion=1.21.1 --configure-on-demand
       - name: Build Paper 1.21.11
-        run: ./gradlew build -Pplatform=paper -PmcVersion=1.21.11
+        run: ./gradlew :paper:build -PmcVersion=1.21.11 --configure-on-demand
 
       # ---------------- Spigot builds (Java 17) ----------------
-      - name: Setup Java 17 for Spigot
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
       - name: Build Spigot 1.20.1
-        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.20.1
+        run: ./gradlew :spigot:build -PmcVersion=1.20.1 --configure-on-demand
       - name: Build Spigot 1.20.4
-        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.20.4
+        run: ./gradlew :spigot:build -PmcVersion=1.20.4 --configure-on-demand
       - name: Build Spigot 1.20.5
-        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.20.5
+        run: ./gradlew :spigot:build -PmcVersion=1.20.5 --configure-on-demand
       - name: Build Spigot 1.20.6
-        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.20.6
+        run: ./gradlew :spigot:build -PmcVersion=1.20.6 --configure-on-demand
       - name: Build Spigot 1.21
-        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.21
+        run: ./gradlew :spigot:build -PmcVersion=1.21 --configure-on-demand
       - name: Build Spigot 1.21.1
-        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.21.1
+        run: ./gradlew :spigot:build -PmcVersion=1.21.1 --configure-on-demand
       - name: Build Spigot 1.21.11
-        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.21.11
+        run: ./gradlew :spigot:build -PmcVersion=1.21.11 --configure-on-demand
 
       # ---------------- Fabric builds (Java 21) ----------------
       - name: Setup Java 21 for Fabric
@@ -91,15 +85,15 @@ jobs:
           java-version: 21
 
       - name: Build Fabric 1.20.4
-        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.20.4
+        run: ./gradlew :fabric:build -PmcVersion=1.20.4 --configure-on-demand
       - name: Build Fabric 1.20.6
-        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.20.6
+        run: ./gradlew :fabric:build -PmcVersion=1.20.6 --configure-on-demand
       - name: Build Fabric 1.21
-        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21
+        run: ./gradlew :fabric:build -PmcVersion=1.21 --configure-on-demand
       - name: Build Fabric 1.21.1
-        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21.1
+        run: ./gradlew :fabric:build -PmcVersion=1.21.1 --configure-on-demand
       - name: Build Fabric 1.21.11
-        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21.11
+        run: ./gradlew :fabric:build -PmcVersion=1.21.11 --configure-on-demand
 
       # ---------------- Collect artifacts ----------------
       - name: Collect artifacts
@@ -107,9 +101,7 @@ jobs:
           mkdir -p $BUILD_DIR
           find . -name "*.jar" ! -name "*original*" | while read FILE; do
             BASE=$(basename "$FILE")
-            PLATFORM=$(echo $BASE | grep -oE 'paper|spigot|fabric' || echo "unknown")
-            MC=$(echo $BASE | grep -oE '1\.20\.1|1\.20\.4|1\.20\.5|1\.20\.6|1\.21|1\.21\.1|1\.21\.11' || echo "unknown")
-            cp "$FILE" "$BUILD_DIR/GrimAnticheat-${PLATFORM}-${MC}.jar"
+            cp "$FILE" "$BUILD_DIR/$BASE"
           done
 
       - name: Upload builds
