@@ -1,4 +1,4 @@
-name: Build All Platforms with Gradle Cache
+name: Build All Platforms
 
 on:
   push:
@@ -9,10 +9,11 @@ permissions:
   contents: write
 
 env:
-  BUILD_DIR: artifacts
   MAX_RELEASES: 10
+  BUILD_DIR: artifacts
 
 jobs:
+
   # ---------------- PAPER ----------------
   build-paper:
     runs-on: ubuntu-latest
@@ -33,22 +34,19 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: gradle-paper-${{ matrix.mc }}-${{ hashFiles('**/*.gradle*','**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-paper-${{ matrix.mc }}-
       - name: Build Paper ${{ matrix.mc }}
         run: |
           mkdir -p $BUILD_DIR
           set +e
-          ./gradlew build -Pplatform=paper -PmcVersion=${{ matrix.mc }} --configure-on-demand
+          ./gradlew build -Pplatform=paper -PmcVersion=${{ matrix.mc }} --configure-on-demand --no-daemon
           set -e
           FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
           if [ -f "$FILE" ]; then
             cp "$FILE" "$BUILD_DIR/GrimAnticheat-Paper-${{ matrix.mc }}.jar"
           else
-            echo "Paper ${{ matrix.mc }} build failed, skipping artifact"
+            echo "Paper ${{ matrix.mc }} build failed, skipping"
           fi
-      - name: Upload Paper artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: paper-builds
           path: $BUILD_DIR/*.jar
@@ -73,22 +71,19 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: gradle-spigot-${{ matrix.mc }}-${{ hashFiles('**/*.gradle*','**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-spigot-${{ matrix.mc }}-
       - name: Build Spigot ${{ matrix.mc }}
         run: |
           mkdir -p $BUILD_DIR
           set +e
-          ./gradlew build -Pplatform=spigot -PmcVersion=${{ matrix.mc }} --configure-on-demand
+          ./gradlew build -Pplatform=spigot -PmcVersion=${{ matrix.mc }} --configure-on-demand --no-daemon
           set -e
           FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
           if [ -f "$FILE" ]; then
             cp "$FILE" "$BUILD_DIR/GrimAnticheat-Spigot-${{ matrix.mc }}.jar"
           else
-            echo "Spigot ${{ matrix.mc }} build failed, skipping artifact"
+            echo "Spigot ${{ matrix.mc }} build failed, skipping"
           fi
-      - name: Upload Spigot artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: spigot-builds
           path: $BUILD_DIR/*.jar
@@ -113,22 +108,19 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: gradle-fabric-${{ matrix.mc }}-${{ hashFiles('**/*.gradle*','**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-fabric-${{ matrix.mc }}-
       - name: Build Fabric ${{ matrix.mc }}
         run: |
           mkdir -p $BUILD_DIR
           set +e
-          ./gradlew build -Pplatform=fabric -PmcVersion=${{ matrix.mc }} --configure-on-demand
+          ./gradlew build -Pplatform=fabric -PmcVersion=${{ matrix.mc }} --no-daemon --configure-on-demand
           set -e
           FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
           if [ -f "$FILE" ]; then
             cp "$FILE" "$BUILD_DIR/GrimAnticheat-Fabric-${{ matrix.mc }}.jar"
           else
-            echo "Fabric ${{ matrix.mc }} build failed, skipping artifact"
+            echo "Fabric ${{ matrix.mc }} build failed, skipping"
           fi
-      - name: Upload Fabric artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: fabric-builds
           path: $BUILD_DIR/*.jar
@@ -138,17 +130,17 @@ jobs:
     needs: [build-paper, build-spigot, build-fabric]
     runs-on: ubuntu-latest
     steps:
-      - name: Download Paper artifacts
+      - name: Download Paper builds
         uses: actions/download-artifact@v4
         with:
           name: paper-builds
           path: builds
-      - name: Download Spigot artifacts
+      - name: Download Spigot builds
         uses: actions/download-artifact@v4
         with:
           name: spigot-builds
           path: builds
-      - name: Download Fabric artifacts
+      - name: Download Fabric builds
         uses: actions/download-artifact@v4
         with:
           name: fabric-builds
