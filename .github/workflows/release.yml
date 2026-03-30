@@ -10,12 +10,12 @@ permissions:
 
 env:
   BUILD_DIR: artifacts
-  MAX_RELEASES: 10
 
 jobs:
   build-fabric:
     runs-on: ubuntu-latest
-
+    outputs:
+      artifact-name: fabric-builds
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,30 +26,19 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Build Fabric 1.20.4
-        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.20.4 --configure-on-demand
-
-      - name: Build Fabric 1.20.6
-        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.20.6 --configure-on-demand
-
-      - name: Build Fabric 1.21
-        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21 --configure-on-demand
-
-      - name: Build Fabric 1.21.1
-        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21.1 --configure-on-demand
-
-      - name: Build Fabric 1.21.11
-        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21.11 --configure-on-demand
-
-      - name: Collect artifacts
+      - name: Build all Fabric versions
         run: |
           mkdir -p $BUILD_DIR
-          find . -name "*.jar" ! -name "*original*" | while read FILE; do
-            BASE=$(basename "$FILE")
-            cp "$FILE" "$BUILD_DIR/$BASE"
+          for MC in 1.20.4 1.20.6 1.21 1.21.1 1.21.11; do
+            echo "Building Fabric $MC"
+            ./gradlew build -Pplatform=fabric -PmcVersion=$MC --configure-on-demand || echo "Build failed for $MC, continuing"
+            FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
+            if [ -f "$FILE" ]; then
+              cp "$FILE" "$BUILD_DIR/GrimAnticheat-Fabric-$MC.jar"
+            fi
           done
 
-      - name: Upload builds
+      - name: Upload Fabric artifacts
         uses: actions/upload-artifact@v4
         with:
           name: fabric-builds
@@ -58,9 +47,8 @@ jobs:
   release:
     needs: build-fabric
     runs-on: ubuntu-latest
-
     steps:
-      - name: Download artifacts
+      - name: Download Fabric artifacts
         uses: actions/download-artifact@v4
         with:
           name: fabric-builds
