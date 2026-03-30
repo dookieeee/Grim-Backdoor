@@ -25,63 +25,78 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Detect valid builds
-        id: detect
+      # ---------- BUILD PAPER ----------
+      - name: Build Paper 1.20.1
+        run: ./gradlew build -Pplatform=paper -PmcVersion=1.20.1
+
+      - name: Build Paper 1.20.4
+        run: ./gradlew build -Pplatform=paper -PmcVersion=1.20.4
+
+      - name: Build Paper 1.20.5
+        run: ./gradlew build -Pplatform=paper -PmcVersion=1.20.5
+
+      - name: Build Paper 1.20.6
+        run: ./gradlew build -Pplatform=paper -PmcVersion=1.20.6
+
+      - name: Build Paper 1.21
+        run: ./gradlew build -Pplatform=paper -PmcVersion=1.21
+
+      - name: Build Paper 1.21.1
+        run: ./gradlew build -Pplatform=paper -PmcVersion=1.21.1
+
+      - name: Build Paper 1.21.11
+        run: ./gradlew build -Pplatform=paper -PmcVersion=1.21.11
+
+      # ---------- BUILD SPIGOT ----------
+      - name: Build Spigot 1.20.1
+        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.20.1
+
+      - name: Build Spigot 1.20.4
+        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.20.4
+
+      - name: Build Spigot 1.20.5
+        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.20.5
+
+      - name: Build Spigot 1.20.6
+        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.20.6
+
+      - name: Build Spigot 1.21
+        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.21
+
+      - name: Build Spigot 1.21.1
+        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.21.1
+
+      - name: Build Spigot 1.21.11
+        run: ./gradlew build -Pplatform=spigot -PmcVersion=1.21.11
+
+      # ---------- BUILD FABRIC ----------
+      - name: Build Fabric 1.20.4
+        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.20.4
+
+      - name: Build Fabric 1.20.6
+        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.20.6
+
+      - name: Build Fabric 1.21
+        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21
+
+      - name: Build Fabric 1.21.1
+        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21.1
+
+      - name: Build Fabric 1.21.11
+        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21.11
+
+      # ---------- COLLECT ARTIFACTS ----------
+      - name: Collect artifacts
         run: |
-          echo "::group::Build matrix entries"
-          MATRIX=$(jq -c '.[]' <<'EOF'
-[
-  {"platform":"paper","mc":"1.20.1"},
-  {"platform":"paper","mc":"1.20.4"},
-  {"platform":"paper","mc":"1.20.5"},
-  {"platform":"paper","mc":"1.20.6"},
-  {"platform":"paper","mc":"1.21"},
-  {"platform":"paper","mc":"1.21.1"},
-  {"platform":"paper","mc":"1.21.11"},
-  {"platform":"spigot","mc":"1.20.1"},
-  {"platform":"spigot","mc":"1.20.4"},
-  {"platform":"spigot","mc":"1.20.5"},
-  {"platform":"spigot","mc":"1.20.6"},
-  {"platform":"spigot","mc":"1.21"},
-  {"platform":"spigot","mc":"1.21.1"},
-  {"platform":"spigot","mc":"1.21.11"},
-  {"platform":"fabric","mc":"1.20.4"},
-  {"platform":"fabric","mc":"1.20.6"},
-  {"platform":"fabric","mc":"1.21"},
-  {"platform":"fabric","mc":"1.21.1"},
-  {"platform":"fabric","mc":"1.21.11"}
-]
-EOF
-)
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
-          echo "::endgroup::"
-
-      - name: Dynamic build loop
-        run: |
-          echo "${{ steps.detect.outputs.matrix }}" | jq -c '.[]' | while read obj; do
-            PL=$(jq -r '.platform' <<< "$obj")
-            MC=$(jq -r '.mc' <<< "$obj")
-
-            echo ">>> Building $PL for Minecraft $MC"
-
-            if [ -f "pom.xml" ]; then
-              mvn clean package -Dmc.version=$MC -Dplatform=$PL -DskipTests
-            elif [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
-              chmod +x gradlew || true
-              ./gradlew build -PmcVersion=$MC -Pplatform=$PL
-            else
-              echo "No build system found!"
-              exit 1
-            fi
-
-            mkdir -p artifacts
-            FILE=$(find . -name "*.jar" | grep -v "original" | head -n1)
-            NAME="GrimAnticheat-${PL}-${MC}.jar"
-            cp "$FILE" "artifacts/$NAME"
+          mkdir -p artifacts
+          for FILE in $(find . -name "*.jar" | grep -v "original"); do
+            BASE=$(basename $FILE)
+            PLATFORM=$(echo $BASE | grep -oE 'paper|spigot|fabric')
+            MC=$(echo $BASE | grep -oE '1\.20\.1|1\.20\.4|1\.20\.5|1\.20\.6|1\.21\.1|1\.21\.11|1\.21')
+            cp "$FILE" "artifacts/GrimAnticheat-${PLATFORM}-${MC}.jar"
           done
-        shell: bash
 
-      - name: Upload builds
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: builds
@@ -90,7 +105,6 @@ EOF
   release:
     needs: build
     runs-on: ubuntu-latest
-
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
