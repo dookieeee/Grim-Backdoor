@@ -1,4 +1,4 @@
-name: Build Valid Grasps
+name: Build Everything (Paper / Spigot / Fabric)
 
 on:
   push:
@@ -79,7 +79,6 @@ EOF
             NAME="GrimAnticheat-${PL}-${MC}.jar"
             cp "$FILE" "artifacts/$NAME"
           done
-
         shell: bash
 
       - name: Upload builds
@@ -91,6 +90,7 @@ EOF
   release:
     needs: build
     runs-on: ubuntu-latest
+
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
