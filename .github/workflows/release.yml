@@ -1,22 +1,101 @@
-name: Publish Release
+name: Build Everything (Paper / Spigot / Fabric)
 
 on:
-    release:
-        types: [published]
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  MAX_RELEASES: 10
 
 jobs:
-    call-release-workflow:
-        uses: ./.github/workflows/build-and-publish.yml
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [17, 21]
+        platform: [paper, spigot, fabric]
+        mc: [1.20.1, 1.20.4, 1.21]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-            runner: 'tenki-standard-autoscale'
-            is-release-build: true
-            release-version-type: release # Official releases are 'release'
-            # Use the body of the GitHub Release as the changelog
-            release-changelog: ${{ github.event.release.body }}
-            run-build-scan: false
-            publish-artifacts: true
-        secrets:
-            MODRINTH_ID: ${{ secrets.MODRINTH_ID }}
-            MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
-            BUILD_UPDATE_TOKEN: ${{ secrets.BUILD_UPDATE_TOKEN }}
-            BUILD_UPDATE_URL: ${{ secrets.BUILD_UPDATE_URL }}
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+
+      # ---------- BUILD LOGIC ----------
+      - name: Build (Maven or Gradle)
+        run: |
+          if [ -f "pom.xml" ]; then
+            mvn clean package -DskipTests
+          elif [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+            chmod +x gradlew || true
+            ./gradlew build
+          else
+            echo "No build file found!"
+            exit 1
+          fi
+
+      # ---------- COLLECT ARTIFACT ----------
+      - name: Collect artifact
+        run: |
+          mkdir -p output
+          FILE=$(find . -type f -name "*.jar" | grep -v "original" | head -n 1)
+
+          NAME="GrimAnticheat-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.mc }}-java${{ matrix.java }}.jar"
+
+          cp "$FILE" "output/$NAME"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: builds
+          path: output/*.jar
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: builds
+          path: builds
+
+      - name: Generate version
+        id: version
+        run: |
+          DATE=$(date +'%Y.%m.%d-%H%M')
+          SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
+          VERSION="${GITHUB_REF_NAME}-${DATE}-${SHORT_SHA}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: auto-${{ steps.version.outputs.version }}
+          name: Auto Build ${{ steps.version.outputs.version }}
+          files: builds/*.jar
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ---------- CLEAN OLD RELEASES ----------
+      - name: Delete old releases
+        uses: dev-drprasad/delete-older-releases@v0.3.4
+        with:
+          keep_latest: ${{ env.MAX_RELEASES }}
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
