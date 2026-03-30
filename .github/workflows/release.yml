@@ -13,13 +13,31 @@ env:
   BUILD_DIR: artifacts
 
 jobs:
-  # ================= BUILD JOB =================
   build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # ---------------- Cache Gradle ----------------
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper/
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/build.gradle*', '**/settings.gradle*') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      # ---------------- Cache Maven (optional) ----------------
+      - name: Cache Maven
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: maven-${{ runner.os }}-
 
       # ---------------- Paper builds (Java 17) ----------------
       - name: Setup Java 17 for Paper
@@ -30,22 +48,16 @@ jobs:
 
       - name: Build Paper 1.20.1
         run: ./gradlew build -Pplatform=paper -PmcVersion=1.20.1
-
       - name: Build Paper 1.20.4
         run: ./gradlew build -Pplatform=paper -PmcVersion=1.20.4
-
       - name: Build Paper 1.20.5
         run: ./gradlew build -Pplatform=paper -PmcVersion=1.20.5
-
       - name: Build Paper 1.20.6
         run: ./gradlew build -Pplatform=paper -PmcVersion=1.20.6
-
       - name: Build Paper 1.21
         run: ./gradlew build -Pplatform=paper -PmcVersion=1.21
-
       - name: Build Paper 1.21.1
         run: ./gradlew build -Pplatform=paper -PmcVersion=1.21.1
-
       - name: Build Paper 1.21.11
         run: ./gradlew build -Pplatform=paper -PmcVersion=1.21.11
 
@@ -58,22 +70,16 @@ jobs:
 
       - name: Build Spigot 1.20.1
         run: ./gradlew build -Pplatform=spigot -PmcVersion=1.20.1
-
       - name: Build Spigot 1.20.4
         run: ./gradlew build -Pplatform=spigot -PmcVersion=1.20.4
-
       - name: Build Spigot 1.20.5
         run: ./gradlew build -Pplatform=spigot -PmcVersion=1.20.5
-
       - name: Build Spigot 1.20.6
         run: ./gradlew build -Pplatform=spigot -PmcVersion=1.20.6
-
       - name: Build Spigot 1.21
         run: ./gradlew build -Pplatform=spigot -PmcVersion=1.21
-
       - name: Build Spigot 1.21.1
         run: ./gradlew build -Pplatform=spigot -PmcVersion=1.21.1
-
       - name: Build Spigot 1.21.11
         run: ./gradlew build -Pplatform=spigot -PmcVersion=1.21.11
 
@@ -86,35 +92,23 @@ jobs:
 
       - name: Build Fabric 1.20.4
         run: ./gradlew build -Pplatform=fabric -PmcVersion=1.20.4
-
       - name: Build Fabric 1.20.6
         run: ./gradlew build -Pplatform=fabric -PmcVersion=1.20.6
-
       - name: Build Fabric 1.21
         run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21
-
       - name: Build Fabric 1.21.1
         run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21.1
-
       - name: Build Fabric 1.21.11
         run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21.11
 
-      # ---------------- Artifact collection ----------------
+      # ---------------- Collect artifacts ----------------
       - name: Collect artifacts
         run: |
           mkdir -p $BUILD_DIR
           find . -name "*.jar" ! -name "*original*" | while read FILE; do
             BASE=$(basename "$FILE")
-            if [[ "$BASE" =~ (paper|spigot|fabric) ]]; then
-              PLATFORM="${BASH_REMATCH[1]}"
-            else
-              PLATFORM="unknown"
-            fi
-            if [[ "$BASE" =~ (1\.20\.1|1\.20\.4|1\.20\.5|1\.20\.6|1\.21|1\.21\.1|1\.21\.11) ]]; then
-              MC="${BASH_REMATCH[1]}"
-            else
-              MC="unknown"
-            fi
+            PLATFORM=$(echo $BASE | grep -oE 'paper|spigot|fabric' || echo "unknown")
+            MC=$(echo $BASE | grep -oE '1\.20\.1|1\.20\.4|1\.20\.5|1\.20\.6|1\.21|1\.21\.1|1\.21\.11' || echo "unknown")
             cp "$FILE" "$BUILD_DIR/GrimAnticheat-${PLATFORM}-${MC}.jar"
           done
 
@@ -124,14 +118,12 @@ jobs:
           name: builds
           path: $BUILD_DIR/*.jar
 
-      # ---------------- Optional static analysis / lint ----------------
-      - name: Run lint checks
+      # ---------------- Optional lint / dependency ----------------
+      - name: Run lint
         run: ./gradlew check
-
       - name: Run dependency check
         run: ./gradlew dependencyCheckAnalyze || true
 
-  # ================= RELEASE JOB =================
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -169,3 +161,8 @@ jobs:
           delete_tags: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ---------------- Optional notifications ----------------
+      - name: Notify Slack (placeholder)
+        if: ${{ failure() }}
+        run: echo "Notify team: build/release failed!"
