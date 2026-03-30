@@ -1,4 +1,4 @@
-name: Build Everything (Paper / Spigot / Fabric)
+name: Build GrimAnticheat
 
 on:
   push:
@@ -10,8 +10,10 @@ permissions:
 
 env:
   MAX_RELEASES: 10
+  BUILD_DIR: artifacts
 
 jobs:
+  # ================= BUILD JOB =================
   build:
     runs-on: ubuntu-latest
 
@@ -19,13 +21,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      # ---------------- Paper builds (Java 17) ----------------
+      - name: Setup Java 17 for Paper
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      # ---------- BUILD PAPER ----------
       - name: Build Paper 1.20.1
         run: ./gradlew build -Pplatform=paper -PmcVersion=1.20.1
 
@@ -47,7 +49,13 @@ jobs:
       - name: Build Paper 1.21.11
         run: ./gradlew build -Pplatform=paper -PmcVersion=1.21.11
 
-      # ---------- BUILD SPIGOT ----------
+      # ---------------- Spigot builds (Java 17) ----------------
+      - name: Setup Java 17 for Spigot
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
       - name: Build Spigot 1.20.1
         run: ./gradlew build -Pplatform=spigot -PmcVersion=1.20.1
 
@@ -69,7 +77,13 @@ jobs:
       - name: Build Spigot 1.21.11
         run: ./gradlew build -Pplatform=spigot -PmcVersion=1.21.11
 
-      # ---------- BUILD FABRIC ----------
+      # ---------------- Fabric builds (Java 21) ----------------
+      - name: Setup Java 21 for Fabric
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
       - name: Build Fabric 1.20.4
         run: ./gradlew build -Pplatform=fabric -PmcVersion=1.20.4
 
@@ -85,26 +99,43 @@ jobs:
       - name: Build Fabric 1.21.11
         run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21.11
 
-      # ---------- COLLECT ARTIFACTS ----------
+      # ---------------- Artifact collection ----------------
       - name: Collect artifacts
         run: |
-          mkdir -p artifacts
-          for FILE in $(find . -name "*.jar" | grep -v "original"); do
-            BASE=$(basename $FILE)
-            PLATFORM=$(echo $BASE | grep -oE 'paper|spigot|fabric')
-            MC=$(echo $BASE | grep -oE '1\.20\.1|1\.20\.4|1\.20\.5|1\.20\.6|1\.21\.1|1\.21\.11|1\.21')
-            cp "$FILE" "artifacts/GrimAnticheat-${PLATFORM}-${MC}.jar"
+          mkdir -p $BUILD_DIR
+          find . -name "*.jar" ! -name "*original*" | while read FILE; do
+            BASE=$(basename "$FILE")
+            if [[ "$BASE" =~ (paper|spigot|fabric) ]]; then
+              PLATFORM="${BASH_REMATCH[1]}"
+            else
+              PLATFORM="unknown"
+            fi
+            if [[ "$BASE" =~ (1\.20\.1|1\.20\.4|1\.20\.5|1\.20\.6|1\.21|1\.21\.1|1\.21\.11) ]]; then
+              MC="${BASH_REMATCH[1]}"
+            else
+              MC="unknown"
+            fi
+            cp "$FILE" "$BUILD_DIR/GrimAnticheat-${PLATFORM}-${MC}.jar"
           done
 
-      - name: Upload artifacts
+      - name: Upload builds
         uses: actions/upload-artifact@v4
         with:
           name: builds
-          path: artifacts/*.jar
+          path: $BUILD_DIR/*.jar
 
+      # ---------------- Optional static analysis / lint ----------------
+      - name: Run lint checks
+        run: ./gradlew check
+
+      - name: Run dependency check
+        run: ./gradlew dependencyCheckAnalyze || true
+
+  # ================= RELEASE JOB =================
   release:
     needs: build
     runs-on: ubuntu-latest
+
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -112,7 +143,7 @@ jobs:
           name: builds
           path: builds
 
-      - name: Version name
+      - name: Generate version tag
         id: tag
         run: |
           DATE=$(date +'%Y.%m.%d-%H%M')
@@ -138,3 +169,8 @@ jobs:
           delete_tags: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ---------------- Optional notifications ----------------
+      - name: Notify Slack (placeholder)
+        if: failure()
+        run: echo "Notify team: build/release failed!" 
