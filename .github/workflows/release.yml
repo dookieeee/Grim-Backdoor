@@ -9,17 +9,15 @@ permissions:
   contents: write
 
 env:
-  MAX_RELEASES: 10
   BUILD_DIR: artifacts
 
 jobs:
 
-  # ---------------- PAPER ----------------
   build-paper:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        mc: [1.18.2, 1.19.4, 1.20.1, 1.20.4, 1.20.5, 1.20.6, 1.21, 1.21.1, 1.21.11]
+        mc: [1.18.2,1.19.4,1.20.1,1.20.4,1.20.5,1.20.6,1.21,1.21.1,1.21.11]
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -43,20 +41,18 @@ jobs:
           FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
           if [ -f "$FILE" ]; then
             cp "$FILE" "$BUILD_DIR/GrimAnticheat-Paper-${{ matrix.mc }}.jar"
-          else
-            echo "Paper ${{ matrix.mc }} build failed, skipping"
           fi
-      - uses: actions/upload-artifact@v4
+      - name: Upload all artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: paper-builds
-          path: $BUILD_DIR/*.jar
+          name: artifacts
+          path: $BUILD_DIR/*
 
-  # ---------------- SPIGOT ----------------
   build-spigot:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        mc: [1.18.2, 1.19.4, 1.20.1, 1.20.4, 1.20.5, 1.20.6, 1.21, 1.21.1, 1.21.11]
+        mc: [1.18.2,1.19.4,1.20.1,1.20.4,1.20.5,1.20.6,1.21,1.21.1,1.21.11]
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -80,20 +76,18 @@ jobs:
           FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
           if [ -f "$FILE" ]; then
             cp "$FILE" "$BUILD_DIR/GrimAnticheat-Spigot-${{ matrix.mc }}.jar"
-          else
-            echo "Spigot ${{ matrix.mc }} build failed, skipping"
           fi
-      - uses: actions/upload-artifact@v4
+      - name: Upload all artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: spigot-builds
-          path: $BUILD_DIR/*.jar
+          name: artifacts
+          path: $BUILD_DIR/*
 
-  # ---------------- FABRIC ----------------
   build-fabric:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        mc: [1.18.2, 1.19.4, 1.20.4, 1.20.6, 1.21, 1.21.1, 1.21.11]
+        mc: [1.18.2,1.19.4,1.20.4,1.20.6,1.21,1.21.1,1.21.11]
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -112,38 +106,26 @@ jobs:
         run: |
           mkdir -p $BUILD_DIR
           set +e
-          ./gradlew build -Pplatform=fabric -PmcVersion=${{ matrix.mc }} --no-daemon --configure-on-demand
+          ./gradlew build -Pplatform=fabric -PmcVersion=${{ matrix.mc }} --configure-on-demand --no-daemon
           set -e
           FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
           if [ -f "$FILE" ]; then
             cp "$FILE" "$BUILD_DIR/GrimAnticheat-Fabric-${{ matrix.mc }}.jar"
-          else
-            echo "Fabric ${{ matrix.mc }} build failed, skipping"
           fi
-      - uses: actions/upload-artifact@v4
+      - name: Upload all artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: fabric-builds
-          path: $BUILD_DIR/*.jar
+          name: artifacts
+          path: $BUILD_DIR/*
 
-  # ---------------- RELEASE ----------------
   release:
     needs: [build-paper, build-spigot, build-fabric]
     runs-on: ubuntu-latest
     steps:
-      - name: Download Paper builds
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: paper-builds
-          path: builds
-      - name: Download Spigot builds
-        uses: actions/download-artifact@v4
-        with:
-          name: spigot-builds
-          path: builds
-      - name: Download Fabric builds
-        uses: actions/download-artifact@v4
-        with:
-          name: fabric-builds
+          name: artifacts
           path: builds
       - name: Generate release tag
         id: tag
