@@ -1,4 +1,4 @@
-name: Build All Platforms
+name: Build All Platforms with Gradle Cache
 
 on:
   push:
@@ -26,6 +26,15 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-paper-${{ matrix.mc }}-${{ hashFiles('**/*.gradle*','**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-paper-${{ matrix.mc }}-
       - name: Build Paper ${{ matrix.mc }}
         run: |
           mkdir -p $BUILD_DIR
@@ -57,6 +66,15 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-spigot-${{ matrix.mc }}-${{ hashFiles('**/*.gradle*','**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-spigot-${{ matrix.mc }}-
       - name: Build Spigot ${{ matrix.mc }}
         run: |
           mkdir -p $BUILD_DIR
@@ -88,6 +106,15 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-fabric-${{ matrix.mc }}-${{ hashFiles('**/*.gradle*','**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-fabric-${{ matrix.mc }}-
       - name: Build Fabric ${{ matrix.mc }}
         run: |
           mkdir -p $BUILD_DIR
