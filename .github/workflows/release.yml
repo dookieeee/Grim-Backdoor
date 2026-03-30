@@ -28,34 +28,33 @@ jobs:
       - name: Detect valid builds
         id: detect
         run: |
-          # Define supported versions
-          PAPER="1.20.1 1.20.4 1.20.5 1.20.6 1.21 1.21.1 1.21.11"
-          SPIGOT="1.20.1 1.20.4 1.20.5 1.20.6 1.21 1.21.1 1.21.11"
-          FABRIC="1.20.4 1.20.6 1.21 1.21.1 1.21.11"
-
           echo "::group::Build matrix entries"
-          MATRIX="[]"
-          for p in paper spigot fabric; do
-            if [ "$p" = "paper" ]; then
-              VERS=$PAPER
-            elif [ "$p" = "spigot" ]; then
-              VERS=$SPIGOT
-            else
-              VERS=$FABRIC
-            fi
-
-            for v in $VERS; do
-              echo "Will build: $p:$v"
-              MATRIX=$(jq -c --arg p "$p" --arg v "$v" '. + [{"platform":$p,"mc":$v}]' <<< "$MATRIX")
-            done
-          done
-
+          MATRIX=$(jq -c '.[]' <<'EOF'
+[
+  {"platform":"paper","mc":"1.20.1"},
+  {"platform":"paper","mc":"1.20.4"},
+  {"platform":"paper","mc":"1.20.5"},
+  {"platform":"paper","mc":"1.20.6"},
+  {"platform":"paper","mc":"1.21"},
+  {"platform":"paper","mc":"1.21.1"},
+  {"platform":"paper","mc":"1.21.11"},
+  {"platform":"spigot","mc":"1.20.1"},
+  {"platform":"spigot","mc":"1.20.4"},
+  {"platform":"spigot","mc":"1.20.5"},
+  {"platform":"spigot","mc":"1.20.6"},
+  {"platform":"spigot","mc":"1.21"},
+  {"platform":"spigot","mc":"1.21.1"},
+  {"platform":"spigot","mc":"1.21.11"},
+  {"platform":"fabric","mc":"1.20.4"},
+  {"platform":"fabric","mc":"1.20.6"},
+  {"platform":"fabric","mc":"1.21"},
+  {"platform":"fabric","mc":"1.21.1"},
+  {"platform":"fabric","mc":"1.21.11"}
+]
+EOF
+)
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
           echo "::endgroup::"
-
-      - name: Setup matrix
-        id: matrix
-        run: echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
       - name: Dynamic build loop
         run: |
