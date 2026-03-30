@@ -1,4 +1,4 @@
-name: Build GrimAnticheat
+name: Build Fabric Only
 
 on:
   push:
@@ -9,93 +9,38 @@ permissions:
   contents: write
 
 env:
-  MAX_RELEASES: 10
   BUILD_DIR: artifacts
+  MAX_RELEASES: 10
 
 jobs:
-  build:
+  build-fabric:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ---------------- Cache Gradle ----------------
-      - name: Cache Gradle
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper/
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/build.gradle*', '**/settings.gradle*') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
-
-      # ---------------- Cache Maven ----------------
-      - name: Cache Maven
-        uses: actions/cache@v3
-        with:
-          path: ~/.m2/repository
-          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
-          restore-keys: maven-${{ runner.os }}-
-
-      # ---------------- Paper builds (Java 17) ----------------
-      - name: Setup Java 17 for Paper/Spigot
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Build Paper 1.20.1
-        run: ./gradlew :paper:build -PmcVersion=1.20.1 --configure-on-demand
-      - name: Build Paper 1.20.4
-        run: ./gradlew :paper:build -PmcVersion=1.20.4 --configure-on-demand
-      - name: Build Paper 1.20.5
-        run: ./gradlew :paper:build -PmcVersion=1.20.5 --configure-on-demand
-      - name: Build Paper 1.20.6
-        run: ./gradlew :paper:build -PmcVersion=1.20.6 --configure-on-demand
-      - name: Build Paper 1.21
-        run: ./gradlew :paper:build -PmcVersion=1.21 --configure-on-demand
-      - name: Build Paper 1.21.1
-        run: ./gradlew :paper:build -PmcVersion=1.21.1 --configure-on-demand
-      - name: Build Paper 1.21.11
-        run: ./gradlew :paper:build -PmcVersion=1.21.11 --configure-on-demand
-
-      # ---------------- Spigot builds (Java 17) ----------------
-      - name: Build Spigot 1.20.1
-        run: ./gradlew :spigot:build -PmcVersion=1.20.1 --configure-on-demand
-      - name: Build Spigot 1.20.4
-        run: ./gradlew :spigot:build -PmcVersion=1.20.4 --configure-on-demand
-      - name: Build Spigot 1.20.5
-        run: ./gradlew :spigot:build -PmcVersion=1.20.5 --configure-on-demand
-      - name: Build Spigot 1.20.6
-        run: ./gradlew :spigot:build -PmcVersion=1.20.6 --configure-on-demand
-      - name: Build Spigot 1.21
-        run: ./gradlew :spigot:build -PmcVersion=1.21 --configure-on-demand
-      - name: Build Spigot 1.21.1
-        run: ./gradlew :spigot:build -PmcVersion=1.21.1 --configure-on-demand
-      - name: Build Spigot 1.21.11
-        run: ./gradlew :spigot:build -PmcVersion=1.21.11 --configure-on-demand
-
-      # ---------------- Fabric builds (Java 21) ----------------
-      - name: Setup Java 21 for Fabric
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
 
       - name: Build Fabric 1.20.4
-        run: ./gradlew :fabric:build -PmcVersion=1.20.4 --configure-on-demand
-      - name: Build Fabric 1.20.6
-        run: ./gradlew :fabric:build -PmcVersion=1.20.6 --configure-on-demand
-      - name: Build Fabric 1.21
-        run: ./gradlew :fabric:build -PmcVersion=1.21 --configure-on-demand
-      - name: Build Fabric 1.21.1
-        run: ./gradlew :fabric:build -PmcVersion=1.21.1 --configure-on-demand
-      - name: Build Fabric 1.21.11
-        run: ./gradlew :fabric:build -PmcVersion=1.21.11 --configure-on-demand
+        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.20.4 --configure-on-demand
 
-      # ---------------- Collect artifacts ----------------
+      - name: Build Fabric 1.20.6
+        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.20.6 --configure-on-demand
+
+      - name: Build Fabric 1.21
+        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21 --configure-on-demand
+
+      - name: Build Fabric 1.21.1
+        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21.1 --configure-on-demand
+
+      - name: Build Fabric 1.21.11
+        run: ./gradlew build -Pplatform=fabric -PmcVersion=1.21.11 --configure-on-demand
+
       - name: Collect artifacts
         run: |
           mkdir -p $BUILD_DIR
@@ -107,18 +52,18 @@ jobs:
       - name: Upload builds
         uses: actions/upload-artifact@v4
         with:
-          name: builds
+          name: fabric-builds
           path: $BUILD_DIR/*.jar
 
   release:
-    needs: build
+    needs: build-fabric
     runs-on: ubuntu-latest
 
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: builds
+          name: fabric-builds
           path: builds
 
       - name: Generate version tag
@@ -127,23 +72,15 @@ jobs:
           DATE=$(date +'%Y.%m.%d-%H%M')
           HASH=${GITHUB_SHA::7}
           BRANCH=${GITHUB_REF_NAME}
-          TAG="auto-$BRANCH-$DATE-$HASH"
+          TAG="fabric-auto-$BRANCH-$DATE-$HASH"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-      - name: Create or update release
+      - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          name: Auto Release ${{ steps.tag.outputs.tag }}
+          name: Fabric Release ${{ steps.tag.outputs.tag }}
           files: builds/*.jar
           prerelease: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Cleanup old releases
-        uses: dev-drprasad/delete-older-releases@v0.3.4
-        with:
-          keep_latest: ${{ env.MAX_RELEASES }}
-          delete_tags: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
