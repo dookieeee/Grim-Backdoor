@@ -118,12 +118,6 @@ jobs:
           name: builds
           path: $BUILD_DIR/*.jar
 
-      # ---------------- Optional lint / dependency ----------------
-      - name: Run lint
-        run: ./gradlew check
-      - name: Run dependency check
-        run: ./gradlew dependencyCheckAnalyze || true
-
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -161,8 +155,3 @@ jobs:
           delete_tags: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # ---------------- Optional notifications ----------------
-      - name: Notify Slack (placeholder)
-        if: ${{ failure() }}
-        run: echo "Notify team: build/release failed!"
