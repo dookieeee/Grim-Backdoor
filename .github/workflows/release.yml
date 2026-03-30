@@ -1,4 +1,4 @@
-name: Build Fabric Only
+name: Build All Platforms
 
 on:
   push:
@@ -9,34 +9,119 @@ permissions:
   contents: write
 
 env:
+  MAX_RELEASES: 10
   BUILD_DIR: artifacts
+  JAVA_VERSION_PAPER_SPIGOT: 17
+  JAVA_VERSION_FABRIC: 21
 
 jobs:
-  build-fabric:
+  build-paper:
     runs-on: ubuntu-latest
-    outputs:
-      artifact-name: fabric-builds
+    strategy:
+      fail-fast: false
+      matrix:
+        mc: [1.18.2,1.19.4,1.20.1,1.20.4,1.20.5,1.20.6,1.21,1.21.1,1.21.11]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Java 21
+      - name: Setup Java 17 for Paper
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
+          java-version: ${{ env.JAVA_VERSION_PAPER_SPIGOT }}
 
-      - name: Build all Fabric versions
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-paper-${{ matrix.mc }}-${{ runner.os }}-${{ hashFiles('**/*.gradle*','**/pom.xml') }}
+
+      - name: Build Paper ${{ matrix.mc }}
         run: |
           mkdir -p $BUILD_DIR
-          for MC in 1.20.4 1.20.6 1.21 1.21.1 1.21.11; do
-            echo "Building Fabric $MC"
-            ./gradlew build -Pplatform=fabric -PmcVersion=$MC --configure-on-demand || echo "Build failed for $MC, continuing"
-            FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
-            if [ -f "$FILE" ]; then
-              cp "$FILE" "$BUILD_DIR/GrimAnticheat-Fabric-$MC.jar"
-            fi
-          done
+          ./gradlew build -Pplatform=paper -PmcVersion=${{ matrix.mc }} --configure-on-demand || echo "Paper ${{ matrix.mc }} failed"
+          FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
+          if [ -f "$FILE" ]; then
+            cp "$FILE" "$BUILD_DIR/GrimAnticheat-Paper-${{ matrix.mc }}.jar"
+          fi
+
+      - name: Upload Paper artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-builds
+          path: $BUILD_DIR/*.jar
+
+  build-spigot:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mc: [1.18.2,1.19.4,1.20.1,1.20.4,1.20.5,1.20.6,1.21,1.21.1,1.21.11]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 17 for Spigot
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION_PAPER_SPIGOT }}
+
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-spigot-${{ matrix.mc }}-${{ runner.os }}-${{ hashFiles('**/*.gradle*','**/pom.xml') }}
+
+      - name: Build Spigot ${{ matrix.mc }}
+        run: |
+          mkdir -p $BUILD_DIR
+          ./gradlew build -Pplatform=spigot -PmcVersion=${{ matrix.mc }} --configure-on-demand || echo "Spigot ${{ matrix.mc }} failed"
+          FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
+          if [ -f "$FILE" ]; then
+            cp "$FILE" "$BUILD_DIR/GrimAnticheat-Spigot-${{ matrix.mc }}.jar"
+          fi
+
+      - name: Upload Spigot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: spigot-builds
+          path: $BUILD_DIR/*.jar
+
+  build-fabric:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mc: [1.20.4,1.20.6,1.21,1.21.1,1.21.11]  # Fabric only supports >=1.20.4
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 21 for Fabric
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION_FABRIC }}
+
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-fabric-${{ matrix.mc }}-${{ runner.os }}-${{ hashFiles('**/*.gradle*','**/pom.xml') }}
+
+      - name: Build Fabric ${{ matrix.mc }}
+        run: |
+          mkdir -p $BUILD_DIR
+          ./gradlew build -Pplatform=fabric -PmcVersion=${{ matrix.mc }} --configure-on-demand || echo "Fabric ${{ matrix.mc }} failed"
+          FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
+          if [ -f "$FILE" ]; then
+            cp "$FILE" "$BUILD_DIR/GrimAnticheat-Fabric-${{ matrix.mc }}.jar"
+          fi
 
       - name: Upload Fabric artifacts
         uses: actions/upload-artifact@v4
@@ -45,10 +130,22 @@ jobs:
           path: $BUILD_DIR/*.jar
 
   release:
-    needs: build-fabric
+    needs: [build-paper, build-spigot, build-fabric]
     runs-on: ubuntu-latest
     steps:
-      - name: Download Fabric artifacts
+      - name: Download Paper builds
+        uses: actions/download-artifact@v4
+        with:
+          name: paper-builds
+          path: builds
+
+      - name: Download Spigot builds
+        uses: actions/download-artifact@v4
+        with:
+          name: spigot-builds
+          path: builds
+
+      - name: Download Fabric builds
         uses: actions/download-artifact@v4
         with:
           name: fabric-builds
@@ -60,14 +157,14 @@ jobs:
           DATE=$(date +'%Y.%m.%d-%H%M')
           HASH=${GITHUB_SHA::7}
           BRANCH=${GITHUB_REF_NAME}
-          TAG="fabric-auto-$BRANCH-$DATE-$HASH"
+          TAG="auto-$BRANCH-$DATE-$HASH"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          name: Fabric Release ${{ steps.tag.outputs.tag }}
+          name: All Platforms Release ${{ steps.tag.outputs.tag }}
           files: builds/*.jar
           prerelease: true
         env:
