@@ -1,4 +1,4 @@
-name: Build Everything (Ultra Reliable)
+name: Grim Ultra Build System
 
 on:
   push:
@@ -16,6 +16,11 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Install gh
+        run: sudo apt-get update && sudo apt-get install gh -y
+
       - name: Generate tag
         id: tag
         run: |
@@ -33,14 +38,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-# ---------------- COMMON BUILD FUNCTION ----------------
+# ---------------- PAPER ----------------
   build-paper:
     needs: create-release
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        mc: [1.18,1.18.2,1.19,1.19.4,1.20.1,1.20.4,1.20.5,1.20.6,1.21,1.21.1,1.21.11]
+        mc: [1.18.2,1.19.4,1.20.1,1.20.4,1.20.5,1.20.6,1.21,1.21.1,1.21.11]
 
     steps:
       - uses: actions/checkout@v4
@@ -50,56 +55,52 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Install gh
-        run: sudo apt-get install gh -y
+      - run: sudo apt-get update && sudo apt-get install gh jq -y
 
-      - name: Build Paper
+      - name: Build
         run: |
           set +e
           ./gradlew build -Pplatform=paper -PmcVersion=${{ matrix.mc }} --no-daemon --configure-on-demand
           set -e
 
-      - name: Process + Upload
+      - name: Upload
         run: |
-          FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
+          FILE=$(find . -type f -name "*.jar" ! -name "*original*" | head -n1)
           [ -f "$FILE" ] || exit 0
 
           NAME="Grim-Paper-${{ matrix.mc }}.jar"
           cp "$FILE" "$NAME"
 
-          # checksum
           sha256sum "$NAME" > "$NAME.sha256"
           HASH=$(cut -d ' ' -f1 "$NAME.sha256")
 
           # check duplicates
-          if gh release view "${{ needs.create-release.outputs.tag }}" --json assets \
-            | jq -r '.assets[].name' | grep -q "$HASH"; then
-            echo "Duplicate detected, skipping"
+          gh release view "${{ needs.create-release.outputs.tag }}" --json assets \
+            | jq -r '.assets[].name' > existing.txt || true
+
+          if grep -q "$HASH" existing.txt; then
+            echo "Duplicate, skipping"
             exit 0
           fi
 
-          # random delay to avoid collisions
           sleep $((RANDOM % 10))
 
-          # retry upload
           for i in 1 2 3 4 5; do
             echo "Upload attempt $i"
             gh release upload "${{ needs.create-release.outputs.tag }}" "$NAME" "$NAME.sha256" --clobber && break
             sleep 5
           done
-
-          echo "Paper ${{ matrix.mc }}" >> built.txt
-
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+# ---------------- SPIGOT ----------------
   build-spigot:
     needs: create-release
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        mc: [1.18,1.18.2,1.19,1.19.4,1.20.1,1.20.4,1.20.5,1.20.6,1.21,1.21.1,1.21.11]
+        mc: [1.18.2,1.19.4,1.20.1,1.20.4,1.20.5,1.20.6,1.21,1.21.1,1.21.11]
 
     steps:
       - uses: actions/checkout@v4
@@ -107,19 +108,15 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      - run: sudo apt-get update && sudo apt-get install gh jq -y
 
-      - name: Install gh
-        run: sudo apt-get install gh -y
-
-      - name: Build Spigot
-        run: |
+      - run: |
           set +e
           ./gradlew build -Pplatform=spigot -PmcVersion=${{ matrix.mc }} --no-daemon --configure-on-demand
           set -e
 
-      - name: Process + Upload
-        run: |
-          FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
+      - run: |
+          FILE=$(find . -type f -name "*.jar" ! -name "*original*" | head -n1)
           [ -f "$FILE" ] || exit 0
 
           NAME="Grim-Spigot-${{ matrix.mc }}.jar"
@@ -128,11 +125,10 @@ jobs:
           sha256sum "$NAME" > "$NAME.sha256"
           HASH=$(cut -d ' ' -f1 "$NAME.sha256")
 
-          if gh release view "${{ needs.create-release.outputs.tag }}" --json assets \
-            | jq -r '.assets[].name' | grep -q "$HASH"; then
-            echo "Duplicate detected, skipping"
-            exit 0
-          fi
+          gh release view "${{ needs.create-release.outputs.tag }}" --json assets \
+            | jq -r '.assets[].name' > existing.txt || true
+
+          if grep -q "$HASH" existing.txt; then exit 0; fi
 
           sleep $((RANDOM % 10))
 
@@ -140,12 +136,10 @@ jobs:
             gh release upload "${{ needs.create-release.outputs.tag }}" "$NAME" "$NAME.sha256" --clobber && break
             sleep 5
           done
-
-          echo "Spigot ${{ matrix.mc }}" >> built.txt
-
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+# ---------------- FABRIC ----------------
   build-fabric:
     needs: create-release
     runs-on: ubuntu-latest
@@ -160,19 +154,15 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      - run: sudo apt-get update && sudo apt-get install gh jq -y
 
-      - name: Install gh
-        run: sudo apt-get install gh -y
-
-      - name: Build Fabric
-        run: |
+      - run: |
           set +e
           ./gradlew build -Pplatform=fabric -PmcVersion=${{ matrix.mc }} --no-daemon --configure-on-demand
           set -e
 
-      - name: Process + Upload
-        run: |
-          FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
+      - run: |
+          FILE=$(find . -type f -name "*.jar" ! -name "*original*" | head -n1)
           [ -f "$FILE" ] || exit 0
 
           NAME="Grim-Fabric-${{ matrix.mc }}.jar"
@@ -181,11 +171,10 @@ jobs:
           sha256sum "$NAME" > "$NAME.sha256"
           HASH=$(cut -d ' ' -f1 "$NAME.sha256")
 
-          if gh release view "${{ needs.create-release.outputs.tag }}" --json assets \
-            | jq -r '.assets[].name' | grep -q "$HASH"; then
-            echo "Duplicate detected, skipping"
-            exit 0
-          fi
+          gh release view "${{ needs.create-release.outputs.tag }}" --json assets \
+            | jq -r '.assets[].name' > existing.txt || true
+
+          if grep -q "$HASH" existing.txt; then exit 0; fi
 
           sleep $((RANDOM % 10))
 
@@ -193,29 +182,25 @@ jobs:
             gh release upload "${{ needs.create-release.outputs.tag }}" "$NAME" "$NAME.sha256" --clobber && break
             sleep 5
           done
-
-          echo "Fabric ${{ matrix.mc }}" >> built.txt
-
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-# ---------------- FINALIZE RELEASE ----------------
+# ---------------- FINALIZE ----------------
   finalize:
     needs: [build-paper, build-spigot, build-fabric]
     runs-on: ubuntu-latest
     steps:
-      - name: Install gh
-        run: sudo apt-get install gh -y
+      - run: sudo apt-get update && sudo apt-get install gh jq -y
 
       - name: Update release notes
         run: |
-          echo "## Built Versions" > notes.md
-          echo "" >> notes.md
-
           gh release view "${{ needs.create-release.outputs.tag }}" --json assets \
-            | jq -r '.assets[].name' >> notes.md
+            | jq -r '.assets[].name' > notes.txt
+
+          echo "## Built Files" > final.md
+          cat notes.txt >> final.md
 
           gh release edit "${{ needs.create-release.outputs.tag }}" \
-            --notes-file notes.md
+            --notes-file final.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
