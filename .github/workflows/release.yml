@@ -1,4 +1,4 @@
-name: Build Everything & Upload to Single Release
+name: Build Everything (Ultra Reliable)
 
 on:
   push:
@@ -8,14 +8,15 @@ on:
 permissions:
   contents: write
 
-# ---------------- CREATE SINGLE RELEASE ----------------
 jobs:
+
+# ---------------- CREATE RELEASE ----------------
   create-release:
     runs-on: ubuntu-latest
     outputs:
-      release_id: ${{ steps.create.outputs.release_id }}
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - name: Generate release tag
+      - name: Generate tag
         id: tag
         run: |
           DATE=$(date +'%Y.%m.%d-%H%M')
@@ -25,46 +26,70 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Create release
-        id: create
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const tag = '${{ steps.tag.outputs.tag }}';
-            const release = await github.rest.repos.createRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag_name: tag,
-              name: `All Builds Release ${tag}`,
-              prerelease: true
-            });
-            return release.data.id;
-          result-encoding: string
+        run: |
+          gh release create "${{ steps.tag.outputs.tag }}" \
+            --title "Auto Build ${{ steps.tag.outputs.tag }}" \
+            --notes "Building..."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-# ---------------- BUILD JOB TEMPLATE ----------------
-
+# ---------------- COMMON BUILD FUNCTION ----------------
   build-paper:
     needs: create-release
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        mc: [1.18,1.18.1,1.19,1.19.2,1.20.1,1.20.4,1.20.5,1.20.6,1.21,1.21.1,1.21.11]
+        mc: [1.18,1.18.2,1.19,1.19.4,1.20.1,1.20.4,1.20.5,1.20.6,1.21,1.21.1,1.21.11]
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
-      - name: Build Paper ${{ matrix.mc }}
-        run: ./gradlew build -Pplatform=paper -PmcVersion=${{ matrix.mc }} --configure-on-demand
-        continue-on-error: true
-      - name: Upload Paper ${{ matrix.mc }}
-        if: success()
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.create-release.outputs.release_id }}
-          files: build/libs/*.jar
+          java-version: 17
+
+      - name: Install gh
+        run: sudo apt-get install gh -y
+
+      - name: Build Paper
+        run: |
+          set +e
+          ./gradlew build -Pplatform=paper -PmcVersion=${{ matrix.mc }} --no-daemon --configure-on-demand
+          set -e
+
+      - name: Process + Upload
+        run: |
+          FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
+          [ -f "$FILE" ] || exit 0
+
+          NAME="Grim-Paper-${{ matrix.mc }}.jar"
+          cp "$FILE" "$NAME"
+
+          # checksum
+          sha256sum "$NAME" > "$NAME.sha256"
+          HASH=$(cut -d ' ' -f1 "$NAME.sha256")
+
+          # check duplicates
+          if gh release view "${{ needs.create-release.outputs.tag }}" --json assets \
+            | jq -r '.assets[].name' | grep -q "$HASH"; then
+            echo "Duplicate detected, skipping"
+            exit 0
+          fi
+
+          # random delay to avoid collisions
+          sleep $((RANDOM % 10))
+
+          # retry upload
+          for i in 1 2 3 4 5; do
+            echo "Upload attempt $i"
+            gh release upload "${{ needs.create-release.outputs.tag }}" "$NAME" "$NAME.sha256" --clobber && break
+            sleep 5
+          done
+
+          echo "Paper ${{ matrix.mc }}" >> built.txt
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -74,22 +99,50 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mc: [1.18,1.18.1,1.19,1.19.2,1.20.1,1.20.4,1.20.5,1.20.6,1.21,1.21.1,1.21.11]
+        mc: [1.18,1.18.2,1.19,1.19.4,1.20.1,1.20.4,1.20.5,1.20.6,1.21,1.21.1,1.21.11]
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
-      - name: Build Spigot ${{ matrix.mc }}
-        run: ./gradlew build -Pplatform=spigot -PmcVersion=${{ matrix.mc }} --configure-on-demand
-        continue-on-error: true
-      - name: Upload Spigot ${{ matrix.mc }}
-        if: success()
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.create-release.outputs.release_id }}
-          files: build/libs/*.jar
+          java-version: 17
+
+      - name: Install gh
+        run: sudo apt-get install gh -y
+
+      - name: Build Spigot
+        run: |
+          set +e
+          ./gradlew build -Pplatform=spigot -PmcVersion=${{ matrix.mc }} --no-daemon --configure-on-demand
+          set -e
+
+      - name: Process + Upload
+        run: |
+          FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
+          [ -f "$FILE" ] || exit 0
+
+          NAME="Grim-Spigot-${{ matrix.mc }}.jar"
+          cp "$FILE" "$NAME"
+
+          sha256sum "$NAME" > "$NAME.sha256"
+          HASH=$(cut -d ' ' -f1 "$NAME.sha256")
+
+          if gh release view "${{ needs.create-release.outputs.tag }}" --json assets \
+            | jq -r '.assets[].name' | grep -q "$HASH"; then
+            echo "Duplicate detected, skipping"
+            exit 0
+          fi
+
+          sleep $((RANDOM % 10))
+
+          for i in 1 2 3 4 5; do
+            gh release upload "${{ needs.create-release.outputs.tag }}" "$NAME" "$NAME.sha256" --clobber && break
+            sleep 5
+          done
+
+          echo "Spigot ${{ matrix.mc }}" >> built.txt
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -99,21 +152,70 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mc: [1.20.4,1.20.6,1.21,1.21.1,1.21.11] # only versions Fabric supports
+        mc: [1.20.4,1.20.6,1.21,1.21.1,1.21.11]
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
-      - name: Build Fabric ${{ matrix.mc }}
-        run: ./gradlew build -Pplatform=fabric -PmcVersion=${{ matrix.mc }} --configure-on-demand
-        continue-on-error: true
-      - name: Upload Fabric ${{ matrix.mc }}
-        if: success()
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.create-release.outputs.release_id }}
-          files: build/libs/*.jar
+
+      - name: Install gh
+        run: sudo apt-get install gh -y
+
+      - name: Build Fabric
+        run: |
+          set +e
+          ./gradlew build -Pplatform=fabric -PmcVersion=${{ matrix.mc }} --no-daemon --configure-on-demand
+          set -e
+
+      - name: Process + Upload
+        run: |
+          FILE=$(find . -name "*.jar" ! -name "*original*" | head -n1)
+          [ -f "$FILE" ] || exit 0
+
+          NAME="Grim-Fabric-${{ matrix.mc }}.jar"
+          cp "$FILE" "$NAME"
+
+          sha256sum "$NAME" > "$NAME.sha256"
+          HASH=$(cut -d ' ' -f1 "$NAME.sha256")
+
+          if gh release view "${{ needs.create-release.outputs.tag }}" --json assets \
+            | jq -r '.assets[].name' | grep -q "$HASH"; then
+            echo "Duplicate detected, skipping"
+            exit 0
+          fi
+
+          sleep $((RANDOM % 10))
+
+          for i in 1 2 3 4 5; do
+            gh release upload "${{ needs.create-release.outputs.tag }}" "$NAME" "$NAME.sha256" --clobber && break
+            sleep 5
+          done
+
+          echo "Fabric ${{ matrix.mc }}" >> built.txt
+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+# ---------------- FINALIZE RELEASE ----------------
+  finalize:
+    needs: [build-paper, build-spigot, build-fabric]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install gh
+        run: sudo apt-get install gh -y
+
+      - name: Update release notes
+        run: |
+          echo "## Built Versions" > notes.md
+          echo "" >> notes.md
+
+          gh release view "${{ needs.create-release.outputs.tag }}" --json assets \
+            | jq -r '.assets[].name' >> notes.md
+
+          gh release edit "${{ needs.create-release.outputs.tag }}" \
+            --notes-file notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
